@@ -19,22 +19,29 @@ jobs:
         with:
           node-version: 20
 
-      - name: Force Clean Icons
+      - name: Force Fix package.json and Icons
         shell: bash
         run: |
-          # مسح أي ملف png برة أو جوة مجلد build ممكن يلخبط الـ makensis
+          # 1. تعديل أي إشارة لـ icon.png جوة الـ package.json وخليها icon.ico
+          if [ -f package.json ]; then
+            sed -i 's/icon.png/icon.ico/g' package.json
+            sed -i 's/icon_1024.png/icon.ico/g' package.json
+            echo "📝 package.json updated to strictly use icon.ico!"
+          fi
+
+          # 2. تنظيف كلي لأي ملفات png متبقية
           rm -f icon.png
           rm -f icon_1024.png
           rm -f build/icon.png
           rm -f build/icon_1024.png
           
-          # التأكد من وجود المجلد ووضع ملف الـ .ico في المكان القياسي
+          # 3. التأكد من وجود مجلد build ونقل الـ ico جواه وفي الـ root
           mkdir -p build
           if [ -f icon.ico ]; then
             cp icon.ico build/icon.ico
           fi
           
-          echo "🧹 All confusing PNG icons removed. Only strict .ico remains!"
+          echo "🧹 Icons layout rearranged perfectly!"
 
       - name: Install dependencies
         run: npm install
