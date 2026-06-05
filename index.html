@@ -5239,7 +5239,27 @@ async function exportPatientsPDF() {
   <table><thead><tr><th>الاسم</th><th>الهاتف</th><th>العمر</th><th>الجنس</th><th>فصيلة الدم</th><th>الجلسات</th><th>الإيرادات</th><th>تاريخ التسجيل</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="footer">نظام إدارة العيادات — ${clinicName}</div>
-  </body></html>`;
+  
+<script>
+if (typeof require !== "undefined") {
+  const { ipcRenderer } = require("electron");
+
+  ipcRenderer.on("門-license-status", (event, status) => {
+    const activationScreen = document.getElementById("activation-screen");
+    const appMainContent = document.getElementById("app-main-content");
+
+    if (status.activated === false) {
+      if (activationScreen) activationScreen.style.display = "flex";
+      if (appMainContent) appMainContent.style.display = "none";
+    } else {
+      if (activationScreen) activationScreen.style.display = "none";
+      if (appMainContent) appMainContent.style.display = "block";
+    }
+  });
+}
+</script>
+
+</body></html>`;
 
   // Check if running in Electron
   if (window.electron && window.electron.savePDF) {
