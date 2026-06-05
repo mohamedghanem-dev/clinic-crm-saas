@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  # ✅ --- بناء Windows بـ ELECTRON (الإصدار الصحيح بنظام الترخيص) ---
+  # ✅ --- بناء Windows بـ ELECTRON (بالأيقونة المخصصة ونظام الترخيص) ---
   build-windows-electron:
     runs-on: windows-latest
     steps:
@@ -19,22 +19,32 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Fix package.json Icon Config
+      - name: Inject and Convert Icon for Windows
         shell: bash
         run: |
-          # حذف أي مسار أيقونة مسبب مشكلة من الـ package.json ليستخدم الأيقونة الافتراضية المؤقتة إذا فشل
+          npm install -g png-to-ico
+          
+          # تحديد ملف الـ PNG المتاح وتحويله لـ .ico للويندوز
+          if [ -f icon_1024.png ]; then
+            png-to-ico icon_1024.png > icon.ico
+          elif [ -f icon.png ]; then
+            png-to-ico icon.png > icon.ico
+          fi
+          
+          # تعديل الـ package.json برمجياً ليشير إلى الـ .ico الجديد
           node -e '
             const fs = require("fs");
             if (fs.existsSync("package.json")) {
               const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
-              if (p.build && p.build.win) {
-                delete p.build.win.icon;
-              }
-              if (p.build) {
-                delete p.build.icon;
-              }
+              if (!p.build) p.build = {};
+              if (!p.build.win) p.build.win = {};
+              
+              // إجبار السيستم على قراءة ملف الـ .ico الصحيح
+              p.build.win.icon = "icon.ico";
+              p.build.icon = "icon.ico";
+              
               fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
-              console.log("⚙️ Package.json build icons bypassed for safe compile!");
+              console.log("🎨 Successfully linked your custom .ico to Electron Builder!");
             }
           '
 
