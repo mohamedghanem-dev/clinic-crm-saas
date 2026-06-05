@@ -7,7 +7,7 @@ on:
 
 jobs:
 
-  # ✅ --- بناء Windows بـ ELECTRON (بالأيقونة المخصصة ونظام الترخيص المضمون) ---
+  # ✅ --- بناء Windows بـ ELECTRON (بالأيقونة المخصصة الجاهزة ونظام الترخيص) ---
   build-windows-electron:
     runs-on: windows-latest
     steps:
@@ -19,44 +19,20 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Force Fix and Convert Custom Icon
+      - name: Configure Package JSON Icons
         shell: bash
         run: |
-          # تثبيت أداة تحويل الأيقونات القياسية
-          npm install -g png-to-ico
-          
-          # تحويل أي ملف PNG متاح لملف ico أصلي متوافق مع الويندوز
-          if [ -f icon_1024.png ]; then
-            png-to-ico icon_1024.png > icon.ico
-          elif [ -f icon.png ]; then
-            png-to-ico icon.png > icon.ico
-          fi
-          
-          # تنظيف أي ملفات PNG مسببة للمشاكل واستبدالها بالـ ico الجديد لضمان عدم القراءة الخاطئة
-          rm -f icon.png
-          rm -f icon_1024.png
-          
-          # إنشاء مجلد البناء الافتراضي احتياطياً ونسخ الأيقونة جواه
-          mkdir -p build
-          cp icon.ico build/icon.ico
-          cp icon.ico icon.png # خدعة ذكية: تسمية الـ ico بامتداد png لإرضاء الإعدادات الصلبة داخل المشروع
-          cp icon.ico build/icon.png
-
-          # تعديل جذر الـ package.json بالكامل برمجياً وتطهير مسارات الأيقونات القديمة
+          # نؤكد للـ package.json استخدام الأيقونة الجديدةicon.ico التي رفعناها
           node -e '
             const fs = require("fs");
             if (fs.existsSync("package.json")) {
               const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
-              
               if (!p.build) p.build = {};
               if (!p.build.win) p.build.win = {};
-              
-              // إجبار الـ Builder على توجيه مسار الأيقونة للملف المتوافق
               p.build.win.icon = "icon.ico";
               p.build.icon = "icon.ico";
-              
               fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
-              console.log("🎯 package.json successfully purged and locked with custom Windows icon!");
+              console.log("⚙️ package.json pointing to pre-built icon.ico");
             }
           '
 
