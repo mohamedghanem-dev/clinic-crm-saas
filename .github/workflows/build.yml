@@ -42,7 +42,7 @@ jobs:
               
               if (!p.build.win) p.build.win = {};
               p.build.win.icon = "build/icon.ico";
-              p.build.win.target = [{ target: "nsis", arch: ["x64"] }];
+              p.build.win.target = [{ target: "nsis", arch: ["x64"] }, { target: "msi", arch: ["x64"] }];
               
               if (!p.build.nsis) p.build.nsis = {};
               p.build.nsis.installerIcon = "build/icon.ico";
