@@ -23,6 +23,26 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800&display=swap');
 
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 15px;
+  -webkit-text-size-adjust: 100%;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Cairo', 'Tajawal', Tahoma, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern" 1;
+  direction: rtl;
+}
+
 :root {
   /* Primary Palette */
   --navy: #0D1B2A;
@@ -312,8 +332,9 @@ RefreshEvents.on('account-updated', () => {
   padding: 10px 12px;
   border-radius: var(--radius-sm);
   color: var(--sidebar-text);
-  font-size: 0.87rem;
+  font-size: 0.92rem;
   font-weight: 600;
+  letter-spacing: 0.01em;
   transition: all var(--trans);
   cursor: pointer;
   margin-bottom: 1px;
@@ -2319,7 +2340,8 @@ body.page-exit {
 <div id="licensePage" style="display:none; position:fixed; inset:0; z-index:9999;
   background: linear-gradient(135deg, #0D1B2A 0%, #1a3a7a 100%);
   font-family: 'Cairo', Tahoma, Arial, sans-serif; direction:rtl;
-  align-items:center; justify-content:center; flex-direction:column;">
+  align-items:center; justify-content:center; flex-direction:column;
+  min-height:100vh; overflow-y:auto;">
 
   <!-- خلفية ديكورية -->
   <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none">
@@ -2329,7 +2351,7 @@ body.page-exit {
       background:rgba(255,255,255,0.03);bottom:-100px;left:-100px;"></div>
   </div>
 
-  <div style="position:relative;z-index:1;width:100%;max-width:480px;padding:24px;box-sizing:border-box;">
+  <div style="position:relative;z-index:1;width:100%;max-width:480px;padding:24px;box-sizing:border-box;margin:auto;">
 
     <!-- Logo -->
     <div style="text-align:center;margin-bottom:32px;">
@@ -3339,7 +3361,7 @@ function seedData() {
         id: 2, patientId: 2, doctorId: 1, clinicId: 1,
         date: today.toISOString().split('T')[0],
         time: '10:00', duration: 30,
-        type: 'متابعة', status: 'pending', notes: '',
+        type: 'متابعة', status: 'confirmed', notes: '',
         createdAt: new Date().toISOString()
       }
     ]);
@@ -3376,6 +3398,16 @@ function seedData() {
   }
 }
 seedData();
+
+// Migration: fix seed appointment #2 that was incorrectly set to 'pending'
+(function fixSeedAppointment() {
+  const appts = DB.get('appointments', []);
+  const seedAppt = appts.find(a => a.id === 2 && a.status === 'pending' && a.patientId === 2 && a.doctorId === 1);
+  if (seedAppt) {
+    seedAppt.status = 'confirmed';
+    DB.set('appointments', appts);
+  }
+})();
 
 // ============================================
 //  AUTH
