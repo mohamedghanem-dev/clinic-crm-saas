@@ -1,294 +1,35 @@
-name: Build Cross-Platform App Pro (All Systems)
+name: Build Clinic CRM Pro
 
 on:
   push:
-    branches: [main]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-
-  # ✅ --- بناء Windows بـ ELECTRON (بالأيقونة المخصصة الجاهزة ونظام الترخيص) ---
-  build-windows-electron:
+  release:
     runs-on: windows-latest
+
     steps:
-      - name: Checkout repository
+      - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-
-      - name: Force Clean and Lock Icon Config
-        shell: bash
-        run: |
-          # حذف أي ملف PNG داخل مجلد build قد يسبب ارتباك لأداة makensis
-          rm -f build/icon.png
-          rm -f build/icon_1024.png
-          
-          # التأكد من أن مجلد build يحتوي فقط على الأيقونة القياسية للويندوز
-          mkdir -p build
-          cp icon.ico build/icon.ico
-
-          # إجبار الـ package.json على التوجيه لملف الـ .ico فقط وتطهير الإعدادات
-          node -e '
-            const fs = require("fs");
-            if (fs.existsSync("package.json")) {
-              const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
-              
-              // إعادة صياغة حقل البناء بالكامل للويندوز لضمان النظافة
-              if (!p.build) p.build = {};
-              p.build.icon = "build/icon.ico";
-              
-              if (!p.build.win) p.build.win = {};
-              p.build.win.icon = "build/icon.ico";
-              p.build.win.target = [{ target: "nsis", arch: ["x64"] }, { target: "msi", arch: ["x64"] }];
-              
-              if (!p.build.nsis) p.build.nsis = {};
-              p.build.nsis.installerIcon = "build/icon.ico";
-              p.build.nsis.uninstallerIcon = "build/icon.ico";
-              
-              fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
-              console.log("🔒 Package.json heavily locked with build/icon.ico!");
-            }
-          '
+          node-size: 20
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows Installer (Electron + License System)
+      - name: Build Electron App
+        # 🚀 هنا السر: تحديد سيرفرات بديلة لتفادي خطأ 500 المتكرر من جيت هاب
+        env:
+          ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
+          ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
         run: npm run build:win -- --publish never
 
-      - name: Upload Windows NSIS Installer
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: Clinic-CRM-Windows-Setup-EXE
-          path: dist/*.exe
-          retention-days: 30
-
-  # 1️⃣ --- بناء تطبيق الأندرويد Pro (APK) ---
-  build-android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Prepare build folder
-        run: |
-          mkdir -p app/build
-          rsync -av --exclude='.github' --exclude='app' --exclude='node_modules' . app/build/
-
-      - name: Init Capacitor
-        run: |
-          cd app
-          npm init -y
-          npm install @capacitor/core @capacitor/cli @capacitor/android @capacitor/assets
-          npx cap init "Clinic CRM Pro" "dev.mohamedghanem.clinicpro" --web-dir build
-
-      - name: Add Android Platform
-        run: |
-          cd app
-          npx cap add android
-
-      - name: Setup icon assets
-        run: |
-          mkdir -p app/assets
-          if [ -f icon_1024.png ]; then
-            cp icon_1024.png app/assets/icon-only.png
-            cp icon_1024.png app/assets/icon.png
-          elif [ -f icon.png ]; then
-            cp icon.png app/assets/icon-only.png
-            cp icon.png app/assets/icon.png
-          fi
-
-      - name: Generate Adaptive Icons
-        run: |
-          cd app
-          npx capacitor-assets generate --android
-
-      - name: Build APK Packaging
-        run: |
-          cd app/android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
-      - name: Upload Android Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clinic-CRM-Pro-Android-APK
-          path: app/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
-
-  # 2️⃣ --- بناء تطبيق الماكوس Pro (Tauri) ---
-  build-macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Tauri Project
-        run: |
-          npm init -y
-          npm install @tauri-apps/cli @tauri-apps/api
-          mkdir dist
-          rsync -av \
-            --exclude='src-tauri' \
-            --exclude='.github' \
-            --exclude='node_modules' \
-            --exclude='dist' \
-            --exclude='app' \
-            ./ dist/
-
-          npx tauri init --ci \
-            --app-name "ClinicCRMPro" \
-            --frontend-dist "../dist"
-
-          node -e '
-            const fs = require("fs");
-            const configPath = "src-tauri/tauri.conf.json";
-            if (fs.existsSync(configPath)) {
-              const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-              config.productName = "ClinicCRMPro";
-              config.identifier = "com.clinic.crmpro";
-              if (!config.build) config.build = {};
-              config.build.beforeBuildCommand = null;
-              config.build.beforeDevCommand = null;
-              if (!config.bundle) config.bundle = {};
-              config.bundle.targets = ["dmg"];
-              if (config.bundle.identifier) delete config.bundle.identifier;
-              if (config.tauri && config.tauri.bundle) delete config.tauri.bundle.identifier;
-              fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-              console.log("🍏 tauri.conf.json configured for macOS Pro v2!");
-            }
-          '
-
-          if [ -f icon_1024.png ]; then
-            npx tauri icon icon_1024.png
-          elif [ -f icon.png ]; then
-            nauri icon icon.png
-          fi
-
-      - name: Build macOS App
-        run: npx tauri build
-
-      - name: Upload macOS Files
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clinic-CRM-Pro-macOS-DMG
-          path: src-tauri/target/release/bundle/dmg/*.dmg
-          retention-days: 30
-
-  # 3️⃣ --- بناء تطبيق الويندوز Pro (Tauri — للأرشيف فقط) ---
-  build-windows-tauri:
-    runs-on: windows-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Tauri CLI & Setup Windows Project
-        shell: pwsh
-        run: |
-          npm init -y
-          npm install @tauri-apps/cli @tauri-apps/api
-          mkdir dist
-          Copy-Item -Path ".*", "*" -Destination "dist" -Recurse -Exclude "src-tauri", ".github", "node_modules", "dist", "app" -ErrorAction SilentlyContinue
-          npx tauri init --ci --app-name "ClinicCRMPro" --frontend-dist "../dist" --dev-url "http://localhost:8080"
-
-          if (Test-Path "icon.png") {
-              npx tauri icon icon.png
-          } elseif (Test-Path "icon_1024.png") {
-              npx tauri icon icon_1024.png
-          }
-
-          $configPath = "src-tauri/tauri.conf.json"
-          $content = Get-Content $configPath -Raw
-          $content = $content -replace '"com.tauri.dev"', '"com.clinic.crmpro"'
-          $content = $content -replace '"beforeBuildCommand": "[^"]*"', '"beforeBuildCommand": null'
-          $content = $content -replace '"beforeDevCommand": "[^"]*"', '"beforeDevCommand": null'
-          $content | Set-Content $configPath
-
-      - name: Build Windows Desktop App (Tauri)
-        run: npx tauri build
-
-      - name: Upload Windows Installer (MSI - Tauri/No License)
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clinic-CRM-Pro-Windows-MSI-Tauri
-          path: src-tauri/target/release/bundle/msi/*.msi
-          retention-days: 30
-
-  # 4️⃣ --- بناء تطبيق لينكس Pro ---
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Install system dependencies for Tauri
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Tauri CLI & Setup Linux Project
-        run: |
-          npm init -y
-          npm install @tauri-apps/cli @tauri-apps/api
-          mkdir dist
-          rsync -av --exclude='src-tauri' --exclude='.github' --exclude='node_modules' --exclude='dist' --exclude='app' . dist/
-          npx tauri init --ci --app-name "ClinicCRMPro" --frontend-dist "../dist" --dev-url "http://localhost:8080"
-
-          if [ -f icon.png ]; then
-            npx tauri icon icon.png
-          elif [ -f icon_1024.png ]; then
-            npx tauri icon icon_1024.png
-          fi
-
-          node -e '
-            const fs = require("fs");
-            const configPath = "src-tauri/tauri.conf.json";
-            if (fs.existsSync(configPath)) {
-              const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
-              config.productName = "ClinicCRMPro";
-              config.identifier = "com.clinic.crmpro";
-              if (!config.build) config.build = {};
-              config.build.beforeBuildCommand = null;
-              config.build.beforeDevCommand = null;
-              if (!config.bundle) config.bundle = {};
-              if (config.bundle.identifier) delete config.bundle.identifier;
-              if (config.tauri && config.tauri.bundle) delete config.tauri.bundle.identifier;
-              fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-              console.log("✅ tauri.conf.json fixed for Linux Pro v2!");
-            }
-          '
-
-      - name: Build Linux App
-        run: npx tauri build
-
-      - name: Upload Linux DEB Package
-        uses: actions/upload-artifact@v4
-        with:
-          name: Clinic-CRM-Pro-Linux-DEB
-          path: src-tauri/target/release/bundle/deb/*.deb
-          retention-days: 30
+          name: Clinic-CRM-Dist
+          path: dist/
