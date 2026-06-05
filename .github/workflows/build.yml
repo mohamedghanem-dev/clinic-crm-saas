@@ -19,6 +19,25 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Fix package.json Icon Config
+        shell: bash
+        run: |
+          # حذف أي مسار أيقونة مسبب مشكلة من الـ package.json ليستخدم الأيقونة الافتراضية المؤقتة إذا فشل
+          node -e '
+            const fs = require("fs");
+            if (fs.existsSync("package.json")) {
+              const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+              if (p.build && p.build.win) {
+                delete p.build.win.icon;
+              }
+              if (p.build) {
+                delete p.build.icon;
+              }
+              fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
+              console.log("⚙️ Package.json build icons bypassed for safe compile!");
+            }
+          '
+
       - name: Install dependencies
         run: npm install
 
