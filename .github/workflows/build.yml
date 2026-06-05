@@ -19,20 +19,37 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Configure Package JSON Icons
+      - name: Force Clean and Lock Icon Config
         shell: bash
         run: |
-          # نؤكد للـ package.json استخدام الأيقونة الجديدةicon.ico التي رفعناها
+          # حذف أي ملف PNG داخل مجلد build قد يسبب ارتباك لأداة makensis
+          rm -f build/icon.png
+          rm -f build/icon_1024.png
+          
+          # التأكد من أن مجلد build يحتوي فقط على الأيقونة القياسية للويندوز
+          mkdir -p build
+          cp icon.ico build/icon.ico
+
+          # إجبار الـ package.json على التوجيه لملف الـ .ico فقط وتطهير الإعدادات
           node -e '
             const fs = require("fs");
             if (fs.existsSync("package.json")) {
               const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+              
+              // إعادة صياغة حقل البناء بالكامل للويندوز لضمان النظافة
               if (!p.build) p.build = {};
+              p.build.icon = "build/icon.ico";
+              
               if (!p.build.win) p.build.win = {};
-              p.build.win.icon = "icon.ico";
-              p.build.icon = "icon.ico";
+              p.build.win.icon = "build/icon.ico";
+              p.build.win.target = [{ target: "nsis", arch: ["x64"] }];
+              
+              if (!p.build.nsis) p.build.nsis = {};
+              p.build.nsis.installerIcon = "build/icon.ico";
+              p.build.nsis.uninstallerIcon = "build/icon.ico";
+              
               fs.writeFileSync("package.json", JSON.stringify(p, null, 2));
-              console.log("⚙️ package.json pointing to pre-built icon.ico");
+              console.log("🔒 Package.json heavily locked with build/icon.ico!");
             }
           '
 
@@ -159,7 +176,7 @@ jobs:
           if [ -f icon_1024.png ]; then
             npx tauri icon icon_1024.png
           elif [ -f icon.png ]; then
-            npx tauri icon icon.png
+            nauri icon icon.png
           fi
 
       - name: Build macOS App
