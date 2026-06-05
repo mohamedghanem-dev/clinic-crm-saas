@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   release:
@@ -16,13 +17,29 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-size: 20
+          node-version: 20
+
+      - name: Force Clean Icons
+        shell: bash
+        run: |
+          # مسح أي ملف png برة أو جوة مجلد build ممكن يلخبط الـ makensis
+          rm -f icon.png
+          rm -f icon_1024.png
+          rm -f build/icon.png
+          rm -f build/icon_1024.png
+          
+          # التأكد من وجود المجلد ووضع ملف الـ .ico في المكان القياسي
+          mkdir -p build
+          if [ -f icon.ico ]; then
+            cp icon.ico build/icon.ico
+          fi
+          
+          echo "🧹 All confusing PNG icons removed. Only strict .ico remains!"
 
       - name: Install dependencies
         run: npm install
 
       - name: Build Electron App
-        # 🚀 هنا السر: تحديد سيرفرات بديلة لتفادي خطأ 500 المتكرر من جيت هاب
         env:
           ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
           ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
@@ -33,3 +50,4 @@ jobs:
         with:
           name: Clinic-CRM-Dist
           path: dist/
+          retention-days: 30
