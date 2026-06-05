@@ -5259,6 +5259,29 @@ if (typeof require !== "undefined") {
 }
 </script>
 
+
+<!-- 🔒 كود استقبال إشارة حظر/تفعيل السيستم من وكالة Nexus Arab -->
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  if (typeof require !== "undefined") {
+    const { ipcRenderer } = require("electron");
+
+    ipcRenderer.on("門-license-status", (event, status) => {
+      const activationScreen = document.getElementById("activation-screen");
+      const appMainContent = document.getElementById("app-main-content");
+
+      if (status.activated === false) {
+        if (activationScreen) activationScreen.style.display = "flex";
+        if (appMainContent) appMainContent.style.display = "none";
+      } else {
+        if (activationScreen) activationScreen.style.display = "none";
+        if (appMainContent) appMainContent.style.display = "block";
+      }
+    });
+  }
+});
+</script>
+
 </body></html>`;
 
   // Check if running in Electron
