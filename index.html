@@ -2337,11 +2337,11 @@ body.page-exit {
 <body>
 
 <!-- ══ LICENSE ACTIVATION SCREEN ══ -->
-<div id="licensePage" style="display:none; position:fixed; inset:0; z-index:9999;
+<div id="licensePage" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; z-index:9999;
   background: linear-gradient(135deg, #0D1B2A 0%, #1a3a7a 100%);
   font-family: 'Cairo', Tahoma, Arial, sans-serif; direction:rtl;
-  align-items:center; justify-content:center; flex-direction:column;
-  min-height:100vh; overflow-y:auto;">
+  flex-direction:column; align-items:center; justify-content:center;
+  width:100vw; height:100vh; overflow-y:auto;">
 
   <!-- خلفية ديكورية -->
   <div style="position:absolute;inset:0;overflow:hidden;pointer-events:none">
@@ -3585,7 +3585,10 @@ setInterval(updateDateTime, 60000);
 const Patients = {
   getAll(doctorId) {
     const all = DB.get('patients', []);
-    return doctorId ? all.filter(p => p.doctorId === doctorId) : all;
+    const clinicId = window._activeClinicId || null;
+    let result = doctorId ? all.filter(p => p.doctorId === doctorId) : all;
+    if (clinicId) result = result.filter(p => p.clinicId === clinicId);
+    return result;
   },
   get(id) { return DB.get('patients', []).find(p => p.id === id) || null; },
   add(data) {
@@ -3616,7 +3619,10 @@ const Patients = {
 const Appointments = {
   getAll(doctorId) {
     const all = DB.get('appointments', []);
-    return doctorId ? all.filter(a => a.doctorId === doctorId) : all;
+    const clinicId = window._activeClinicId || null;
+    let result = doctorId ? all.filter(a => a.doctorId === doctorId) : all;
+    if (clinicId) result = result.filter(a => a.clinicId === clinicId);
+    return result;
   },
   getToday(doctorId) {
     const today = Utils.todayStr();
@@ -3650,7 +3656,10 @@ const Appointments = {
 const Sessions = {
   getAll(doctorId) {
     const all = DB.get('sessions', []);
-    return doctorId ? all.filter(s => s.doctorId === doctorId) : all;
+    const clinicId = window._activeClinicId || null;
+    let result = doctorId ? all.filter(s => s.doctorId === doctorId) : all;
+    if (clinicId) result = result.filter(s => s.clinicId === clinicId);
+    return result;
   },
   get(id) { return DB.get('sessions', []).find(s => s.id === id) || null; },
   add(data) {
@@ -3679,7 +3688,10 @@ const Sessions = {
 // ============================================
 const Staff = {
   getByDoctor(doctorId) {
-    return DB.get('users', []).filter(u => u.role === 'staff' && u.createdBy === doctorId);
+    const clinicId = window._activeClinicId || null;
+    let result = DB.get('users', []).filter(u => u.role === 'staff' && u.createdBy === doctorId);
+    if (clinicId) result = result.filter(u => u.clinicId === clinicId);
+    return result;
   },
   add(data) {
     const users = DB.get('users', []);
@@ -3825,7 +3837,10 @@ function buildSidebarContent(user) {
     }).join('');
 
   const clinics = DB.get('clinics', []);
-  const clinicOptions = clinics.map(c => `<option value="${c.id}" ${c.id === user.clinicId ? 'selected' : ''}>${c.name}</option>`).join('');
+  // Build options: "كل الفروع" first, then each clinic
+  const activeClinicId = window._activeClinicId !== undefined ? window._activeClinicId : (user.clinicId || null);
+  const clinicOptions = `<option value="">كل الفروع</option>` +
+    clinics.map(c => `<option value="${c.id}" ${c.id === activeClinicId ? 'selected' : ''}>${c.name}</option>`).join('');
 
   document.getElementById('sidebarContent').innerHTML = `
     <div class="sidebar-logo">
@@ -3860,6 +3875,16 @@ function buildSidebarContent(user) {
   `;
 
   document.getElementById('clinicSelector').innerHTML = clinicOptions;
+  // Set the current selected value explicitly
+  document.getElementById('clinicSelector').value = activeClinicId || '';
+
+  // Clinic switch handler — filters all data views to the selected branch
+  document.getElementById('clinicSelector').addEventListener('change', function() {
+    const val = this.value;
+    window._activeClinicId = val === '' ? null : parseInt(val);
+    // Refresh the current page so all lists re-filter
+    navTo(_currentPage);
+  });
 
   document.getElementById('logoutBtn').addEventListener('click', () => {
     if (confirm('هل تريد تسجيل الخروج؟')) Auth.logout();
@@ -3895,6 +3920,7 @@ document.getElementById('sidebarOverlay').addEventListener('click', () => {
 // ══════════════════════════════════════════════
 Auth.logout = function() {
   DB.remove('session');
+  window._activeClinicId = null;
   showLoginPage();
 };
 
@@ -3910,6 +3936,10 @@ function showLoginPage() {
 
 function showApp(user) {
   _currentUser = user;
+  // Default clinic filter to the user's own clinic on login
+  if (window._activeClinicId === undefined || window._activeClinicId === null) {
+    window._activeClinicId = user.clinicId || null;
+  }
   document.getElementById('loginPage').style.display = 'none';
   document.getElementById('appLayout').style.display = 'flex';
   buildSidebarContent(user);
@@ -4836,21 +4866,50 @@ function saveBranch() {
   RefreshEvents.emit('branches-updated');
 }
 
-function exportData() {
-  const data={users:DB.get('users',[]),patients:DB.get('patients',[]),appointments:DB.get('appointments',[]),sessions:DB.get('sessions',[]),clinics:DB.get('clinics',[]),settings:DB.get('settings',{})};
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
-  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='clinic_backup.json'; a.click(); URL.revokeObjectURL(url);
-  showToast('تم تصدير البيانات');
+async function exportData() {
+  const data = {
+    users: DB.get('users',[]),
+    patients: DB.get('patients',[]),
+    appointments: DB.get('appointments',[]),
+    sessions: DB.get('sessions',[]),
+    clinics: DB.get('clinics',[]),
+    settings: DB.get('settings',{})
+  };
+  const timestamp = new Date().toISOString().slice(0,10);
+  const fileName  = `clinic-data-${timestamp}.json`;
+  if (window.electron && window.electron.saveJSON) {
+    const result = await window.electron.saveJSON(data, fileName);
+    if (result.success) showNotification('تم تصدير البيانات بنجاح', 'success');
+    else if (result.error !== 'تم الإلغاء') showNotification('خطأ: ' + result.error, 'error');
+  } else {
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+    showNotification('تم تصدير البيانات بنجاح', 'success');
+  }
 }
 
-function exportPatientsCsv() {
-  const patients=DB.get('patients',[]);
-  const rows=[['الاسم','الهاتف','العمر','الجنس','فصيلة الدم','العنوان','ملاحظات','تاريخ التسجيل']];
-  patients.forEach(p=>rows.push([p.name,p.phone,p.age||'',p.gender||'',p.bloodType||'',p.address||'',p.notes||'',p.createdAt||'']));
-  const csv=rows.map(r=>r.join(',')).join('\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='patients.csv'; a.click(); URL.revokeObjectURL(url);
-  showToast('تم تصدير بيانات المرضى');
+async function exportPatientsCsv() {
+  const patients = DB.get('patients',[]);
+  const rows = [['الاسم','الهاتف','العمر','الجنس','فصيلة الدم','العنوان','ملاحظات','تاريخ التسجيل']];
+  patients.forEach(p => rows.push([p.name, p.phone, p.age||'', p.gender||'', p.bloodType||'', p.address||'', p.notes||'', p.createdAt||'']));
+  const csv = rows.map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const timestamp = new Date().toISOString().slice(0,10);
+  const fileName  = `patients-${timestamp}.csv`;
+  if (window.electron && window.electron.saveCSV) {
+    const result = await window.electron.saveCSV(csv, fileName);
+    if (result.success) showNotification('تم تصدير بيانات المرضى بنجاح', 'success');
+    else if (result.error !== 'تم الإلغاء') showNotification('خطأ: ' + result.error, 'error');
+  } else {
+    const blob = new Blob(['\uFEFF' + csv], {type:'text/csv;charset=utf-8;'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = fileName; a.click();
+    URL.revokeObjectURL(url);
+    showNotification('تم تصدير بيانات المرضى بنجاح', 'success');
+  }
 }
 
 function importData() {
@@ -5239,50 +5298,7 @@ async function exportPatientsPDF() {
   <table><thead><tr><th>الاسم</th><th>الهاتف</th><th>العمر</th><th>الجنس</th><th>فصيلة الدم</th><th>الجلسات</th><th>الإيرادات</th><th>تاريخ التسجيل</th></tr></thead>
   <tbody>${rows}</tbody></table>
   <div class="footer">نظام إدارة العيادات — ${clinicName}</div>
-  
-<script>
-if (typeof require !== "undefined") {
-  const { ipcRenderer } = require("electron");
-
-  ipcRenderer.on("門-license-status", (event, status) => {
-    const activationScreen = document.getElementById("activation-screen");
-    const appMainContent = document.getElementById("app-main-content");
-
-    if (status.activated === false) {
-      if (activationScreen) activationScreen.style.display = "flex";
-      if (appMainContent) appMainContent.style.display = "none";
-    } else {
-      if (activationScreen) activationScreen.style.display = "none";
-      if (appMainContent) appMainContent.style.display = "block";
-    }
-  });
-}
-</script>
-
-
-<!-- 🔒 كود استقبال إشارة حظر/تفعيل السيستم من وكالة Nexus Arab -->
-<script>
-document.addEventListener("DOMContentLoaded", () => {
-  if (typeof require !== "undefined") {
-    const { ipcRenderer } = require("electron");
-
-    ipcRenderer.on("門-license-status", (event, status) => {
-      const activationScreen = document.getElementById("activation-screen");
-      const appMainContent = document.getElementById("app-main-content");
-
-      if (status.activated === false) {
-        if (activationScreen) activationScreen.style.display = "flex";
-        if (appMainContent) appMainContent.style.display = "none";
-      } else {
-        if (activationScreen) activationScreen.style.display = "none";
-        if (appMainContent) appMainContent.style.display = "block";
-      }
-    });
-  }
-});
-</script>
-
-</body></html>`;
+  </body></html>`;
 
   // Check if running in Electron
   if (window.electron && window.electron.savePDF) {

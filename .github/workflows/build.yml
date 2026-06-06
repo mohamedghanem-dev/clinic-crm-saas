@@ -34,13 +34,13 @@ jobs:
           rm -f icon_1024.png
           rm -f build/icon.png
           rm -f build/icon_1024.png
-          
+
           # 3. التأكد من وجود مجلد build ونقل الـ ico جواه وفي الـ root
           mkdir -p build
           if [ -f icon.ico ]; then
             cp icon.ico build/icon.ico
           fi
-          
+
           echo "🧹 Icons layout rearranged perfectly!"
 
       - name: Install dependencies
