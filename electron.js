@@ -29,6 +29,64 @@ function getHardwareId() {
 const userDataPath  = app.getPath('userData');
 const licensePath   = path.join(userDataPath, 'license.json');
 
+// المفتاح العام ECDSA P-256 — يطابق private_key.pem
+const PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEAAp+E9uSUiUEwzL3WZX/TQTB3Wfk
+Ua1lmotR7Go2z+vAleV9T+Xe0h2SLXRM/cR9uC74XVOpN9n5I+yzsO454g==
+-----END PUBLIC KEY-----`;
+
+function verifyLicenseKey(rawKey, hwid) {
+  try {
+    if (typeof rawKey !== 'string') return { ok: false, reason: 'مفتاح غير صالح' };
+    const key    = rawKey.trim();
+    const dotIdx = key.lastIndexOf('.');
+    if (dotIdx === -1) return { ok: false, reason: 'صيغة المفتاح غير صحيحة' };
+
+    const payloadB64   = key.substring(0, dotIdx);
+    const sigB64       = key.substring(dotIdx + 1);
+    const payloadBytes = Buffer.from(payloadB64.replace(/-/g,'+').replace(/_/g,'/'), 'base64');
+    const payload      = JSON.parse(payloadBytes.toString('utf8'));
+
+    // فك تشفير التوقيع raw r||s → DER
+    const sigRaw = Buffer.from(sigB64.replace(/-/g,'+').replace(/_/g,'/'), 'base64');
+    if (sigRaw.length !== 64) return { ok: false, reason: 'توقيع غير صالح' };
+
+    function encodeInt(buf) {
+      let i = 0;
+      while (i < buf.length - 1 && buf[i] === 0) i++;
+      buf = buf.subarray(i);
+      if (buf[0] & 0x80) buf = Buffer.concat([Buffer.from([0x00]), buf]);
+      return Buffer.concat([Buffer.from([0x02, buf.length]), buf]);
+    }
+    const rDer = encodeInt(sigRaw.subarray(0, 32));
+    const sDer = encodeInt(sigRaw.subarray(32, 64));
+    const seq  = Buffer.concat([Buffer.from([0x30, rDer.length + sDer.length]), rDer, sDer]);
+
+    // التحقق من التوقيع
+    const verify = crypto.createVerify('SHA256');
+    verify.update(payloadBytes);
+    if (!verify.verify(PUBLIC_KEY_PEM, seq)) {
+      return { ok: false, reason: 'مفتاح التفعيل غير صحيح' };
+    }
+
+    // التحقق من الـ HWID
+    if (payload.hwid !== hwid.trim().toUpperCase()) {
+      return { ok: false, reason: 'هذا المفتاح مرتبط بجهاز آخر' };
+    }
+
+    // التحقق من تاريخ الانتهاء
+    if (payload.exp && payload.exp > 0) {
+      if (Math.floor(Date.now() / 1000) > payload.exp) {
+        return { ok: false, reason: 'انتهت صلاحية مفتاح التفعيل' };
+      }
+    }
+
+    return { ok: true, exp: payload.exp || 0 };
+  } catch (e) {
+    return { ok: false, reason: 'خطأ في التحقق من المفتاح' };
+  }
+}
+
 function readLicense() {
   try {
     if (!fs.existsSync(licensePath)) return null;
@@ -38,7 +96,15 @@ function readLicense() {
 
 function isLicenseValid() {
   const lic = readLicense();
-  return lic && lic.activated === true;
+  if (!lic || lic.activated !== true) return false;
+  // فحص انتهاء الصلاحية تلقائياً
+  if (lic.exp && lic.exp > 0) {
+    if (Math.floor(Date.now() / 1000) > lic.exp) {
+      try { fs.unlinkSync(licensePath); } catch {}
+      return false;
+    }
+  }
+  return true;
 }
 
 // ── Window ─────────────────────────────────────────────────────────────────
@@ -81,21 +147,21 @@ function registerIpcHandlers() {
   ipcMain.handle('license:get-hwid', () => getHardwareId());
 
   ipcMain.handle('license:check', () => {
-    return { valid: isLicenseValid() };
+    return { licensed: isLicenseValid() };
   });
 
   ipcMain.handle('license:activate', (_e, key) => {
     try {
-      const hwid = getHardwareId();
-      // Simple validation: key must contain the hwid (customize your own logic here)
-      const valid = typeof key === 'string' && key.trim().length >= 8;
-      if (!valid) return { ok: false, reason: 'مفتاح التفعيل غير صحيح' };
+      const hwid   = getHardwareId();
+      const result = verifyLicenseKey(key, hwid);
+      if (!result.ok) return { ok: false, reason: result.reason };
 
       fs.mkdirSync(userDataPath, { recursive: true });
       fs.writeFileSync(licensePath, JSON.stringify({
-        activated: true,
+        activated:   true,
         hwid,
-        key: key.trim(),
+        key:         key.trim(),
+        exp:         result.exp,
         activatedAt: new Date().toISOString()
       }, null, 2), 'utf8');
       return { ok: true };
