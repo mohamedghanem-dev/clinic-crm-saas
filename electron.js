@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron');
 const path   = require('path');
 const fs     = require('fs');
 const os     = require('os');
@@ -127,8 +127,20 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // إخفاء الـ Menu Bar تماماً
+  Menu.setApplicationMenu(null);
+
   registerIpcHandlers();
   createWindow();
+
+  // ── فحص الترخيص كل 60 ثانية أثناء التشغيل ──────────────────────────
+  setInterval(() => {
+    if (mainWindow && !isLicenseValid()) {
+      try { fs.unlinkSync(licensePath); } catch {}
+      mainWindow.webContents.send('license:expired');
+    }
+  }, 60000);
+
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -145,6 +157,8 @@ function registerIpcHandlers() {
 
   // ── License ───────────────────────────────────────────────────────────
   ipcMain.handle('license:get-hwid', () => getHardwareId());
+
+  ipcMain.on('app:quit', () => app.quit());
 
   ipcMain.handle('license:check', () => {
     return { licensed: isLicenseValid() };

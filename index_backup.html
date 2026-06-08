@@ -131,13 +131,13 @@ function refreshData() {
     const currentPage = document.querySelector('.spa-page.active');
     if (currentPage) {
       const pageId = currentPage.id;
-      if      (pageId === 'page-dashboard')    initDashboard();
+      if      (pageId === 'page-dashboard')    renderDashboard();
       else if (pageId === 'page-patients')     renderPatients();
       else if (pageId === 'page-sessions')     renderSessions();
       else if (pageId === 'page-appointments') renderAppointments();
       else if (pageId === 'page-finance')      renderFinance();
       else if (pageId === 'page-reports')      renderReports();
-      else if (pageId === 'page-settings')     { renderBranches(); initSettings(); }
+      else if (pageId === 'page-settings')     { renderBranches(); renderSettingsUI(); }
     }
     showNotification('تم تحديث البيانات بنجاح', 'success');
   } catch (e) {
@@ -165,7 +165,7 @@ RefreshEvents.on('settings-updated', () => {
   console.log('[v0] Settings updated, refreshing UI');
   const currentPage = document.querySelector('.spa-page.active');
   if (currentPage && currentPage.id === 'page-settings') {
-    initSettings();
+    renderSettingsUI();
   }
 });
 

@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electron', {
   checkLicense:    ()      => ipcRenderer.invoke('license:check'),
   activateLicense: (key)   => ipcRenderer.invoke('license:activate', key),
 
+  // ── App ──────────────────────────────────────────────────────────────
+  quitApp: () => ipcRenderer.send('app:quit'),
+
   // ── Backup ───────────────────────────────────────────────────────────
   saveBackup: (backupData, defaultFileName) =>
     ipcRenderer.invoke('save-backup', { backupData, defaultFileName }),
